@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import useQueryStore from '@/stores/QueryStore';
 import useConnectStore from '@/stores/ConnectStore';
-import { getDatabaseSchema } from '@/utils/api';
-import { Parser } from 'node-sql-parser'; // SQL parser
+import {executeQuery, getDatabaseSchema} from '@/utils/api';
+import { Parser } from 'node-sql-parser';
+import Table from "@/components/Table"; // SQL parser
 
 // Dynamically import AceEditor with SSR disabled
 const AceEditor = dynamic(() => import('react-ace'), { ssr: false });
@@ -12,21 +13,21 @@ const AceEditor = dynamic(() => import('react-ace'), { ssr: false });
 const EditorPage = () => {
     const router = useRouter();
     const { query, setQuery, schema, setSchema, table, setTable } = useQueryStore();
-    const { host, port, username, password, driver, database } = useConnectStore();
+    const { host, port, username, password, driver } = useConnectStore();
     const [expandedDatabases, setExpandedDatabases] = useState<Record<string, boolean>>({});
     const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
     const [editor, setEditor] = useState<any>(null);
     const sqlParser = new Parser(); // Initialize SQL parser
 
     useEffect(() => {
-        if (!host || !port || !username || !password || !driver || !database) {
+        if (!host || !port || !username || !password || !driver) {
             router.push('/');
             return;
         }
 
         const fetchSchema = async () => {
             try {
-                const schemaData = await getDatabaseSchema(host, port, username, password, driver, database);
+                const schemaData = await getDatabaseSchema(host, port, username, password, driver);
                 setSchema(schemaData);
 
                 // Generate autocomplete suggestions
@@ -38,7 +39,7 @@ const EditorPage = () => {
         };
 
         fetchSchema();
-    }, [host, port, username, password, driver, database, setSchema, router]);
+    }, [host, port, username, password, driver, setSchema, router]);
 
     const generateAutocompleteSuggestions = (schemaData: Record<string, Record<string, Column[]>>) => {
         const suggestions: string[] = [];
@@ -119,14 +120,15 @@ const EditorPage = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        const response = await fetch('/api/query', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-        });
-
-        const data = await response.json();
-        setTable(data);
+        const response = await executeQuery(
+            host,
+            port,
+            username,
+            password,
+            driver,
+            query
+        )
+        setTable(response);
     };
 
     const toggleDatabase = (databaseName: string) => {
@@ -214,9 +216,7 @@ const EditorPage = () => {
                 {table && (
                     <div>
                         <h2>Query Result</h2>
-                        <pre style={{ backgroundColor: '#f7f7f7', padding: '10px', borderRadius: '5px' }}>
-                            {JSON.stringify(table, null, 2)}
-                        </pre>
+                        <Table data={table} />
                     </div>
                 )}
             </div>

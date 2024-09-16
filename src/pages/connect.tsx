@@ -11,13 +11,11 @@ const ConnectPage = () => {
         username,
         password,
         driver,
-        database,
         setHost,
         setPort,
         setUsername,
         setPassword,
         setDriver,
-        setDatabase
     } = useConnectStore();
 
     const {setSchema} = useQueryStore();
@@ -28,7 +26,7 @@ const ConnectPage = () => {
         e.preventDefault();
 
         try {
-            const schemaData = await getDatabaseSchema(host, port, username, password, driver, database);
+            const schemaData = await getDatabaseSchema(host, port, username, password, driver);
             setSchema(schemaData)
             router.push('/editor'); // Navigate to EditorPage
         } catch (error) {
@@ -87,16 +85,6 @@ const ConnectPage = () => {
                         id="driver"
                         value={driver}
                         onChange={(e) => setDriver(e.target.value)}
-                        required
-                    />
-                </div>
-                <div className="form-group">
-                    <label htmlFor="database">Database</label>
-                    <input
-                        type="text"
-                        id="database"
-                        value={database}
-                        onChange={(e) => setDatabase(e.target.value)}
                         required
                     />
                 </div>
