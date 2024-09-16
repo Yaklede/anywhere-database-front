@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import useQueryStore from '@/stores/QueryStore';
 import useConnectStore from '@/stores/ConnectStore';
 import { getDatabaseSchema } from '@/utils/api';
+import { Parser } from 'node-sql-parser'; // SQL parser
 
 // Dynamically import AceEditor with SSR disabled
 const AceEditor = dynamic(() => import('react-ace'), { ssr: false });
@@ -15,6 +16,7 @@ const EditorPage = () => {
     const [expandedDatabases, setExpandedDatabases] = useState<Record<string, boolean>>({});
     const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
     const [editor, setEditor] = useState<any>(null);
+    const sqlParser = new Parser(); // Initialize SQL parser
 
     useEffect(() => {
         if (!host || !port || !username || !password || !driver || !database) {
@@ -51,13 +53,28 @@ const EditorPage = () => {
             }
         }
 
-        // Add common SQL keywords
         const sqlKeywords = [
             'SELECT', 'FROM', 'WHERE', 'JOIN', 'ON', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'TABLE'
         ];
         suggestions.push(...sqlKeywords);
 
         return suggestions;
+    };
+
+    // SQL parsing and error checking function
+    const parseSQL = (sql: string) => {
+        try {
+            sqlParser.astify(sql); // Try parsing the query
+            editor.getSession().clearAnnotations(); // Clear any existing annotations if valid
+        } catch (error: any) {
+            const errorLine = error.location?.start?.line || 0;
+            editor.getSession().setAnnotations([{
+                row: errorLine - 1, // Ace is 0-indexed, parser is 1-indexed
+                column: 0,
+                text: error.message, // Error message from parser
+                type: 'error', // Highlight as error
+            }]);
+        }
     };
 
     // Custom autocomplete completer
@@ -69,7 +86,7 @@ const EditorPage = () => {
             }
 
             const completions = autocompleteSuggestions
-                .filter(suggestion => suggestion.toLowerCase().startsWith(prefix.toLowerCase())) // Filter suggestions based on prefix
+                .filter(suggestion => suggestion.toLowerCase().startsWith(prefix.toLowerCase()))
                 .map(suggestion => ({
                     caption: suggestion,
                     value: suggestion,
@@ -80,9 +97,7 @@ const EditorPage = () => {
     };
 
     useEffect(() => {
-        // Ensure this runs only in the browser (client-side)
         if (typeof window !== 'undefined' && editor) {
-            // Dynamically load Ace build and language tools
             const loadAceModules = async () => {
                 try {
                     const ace = await import('ace-builds/src-noconflict/ace');
@@ -92,7 +107,6 @@ const EditorPage = () => {
 
                     const langTools = ace.require('ace/ext/language_tools');
                     langTools.addCompleter(customCompleter);
-
                 } catch (error) {
                     console.error('Error loading Ace modules:', error);
                 }
@@ -102,7 +116,6 @@ const EditorPage = () => {
         }
     }, [editor, autocompleteSuggestions]);
 
-    // Submit the query
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -116,7 +129,6 @@ const EditorPage = () => {
         setTable(data);
     };
 
-    // Toggle database display
     const toggleDatabase = (databaseName: string) => {
         setExpandedDatabases((prev) => ({
             ...prev,
@@ -172,7 +184,10 @@ const EditorPage = () => {
                         width="100%"
                         height="400px"
                         value={query}
-                        onChange={(value) => setQuery(value || '')}
+                        onChange={(value) => {
+                            setQuery(value || '');
+                            parseSQL(value || ''); // Parse SQL and check for errors
+                        }}
                         editorProps={{ $blockScrolling: true }}
                         setOptions={{
                             enableBasicAutocompletion: true,
